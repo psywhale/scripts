@@ -1,0 +1,77 @@
+#!/bin/bash
+
+#host=my.db.com
+#user=repl_check
+#password=xxxx
+
+#must use bsd-mailx
+
+FROMADDRESS="mdl3dbslave@wosc.edu"
+
+SKULL="=?UTF-8?Q?=E2=98=A0?="
+WARNING="=?UTF-8?Q?=E2=9A=A0?="
+SECONDSTHRESHOLD=10
+EMAIL="brian.carpenter@wosc.edu"
+SLOW_FLAG=/tmp/slavesec_flag
+OFF_FLAG=/tmp/slaveoff_flag
+SQL_OUTPUT=/tmp/slavecheck_output
+
+if [ -e $SQL_OUTPUT ]; then
+  rm $SQL_OUTPUT
+fi
+
+MSG=`mysql --defaults-file=/etc/mysql/debian.cnf -e "show slave status \G"| grep Last_SQL_Error | sed -e 's/ *Last_SQL_Error: //'`
+mysql --defaults-file=/etc/mysql/debian.cnf -e "show slave status \G" > $SQL_OUTPUT
+#echo "$MSG"
+
+if [ -n "$MSG" ]; then
+    # email someone 
+   echo $MSG | mailx -s "MySQL Replication error SQL" $EMAIL
+   exit
+fi
+
+#check slave IO
+MSG=`mysql --defaults-file=/etc/mysql/debian.cnf -e "show slave status \G"| grep Slave_IO_Running | sed -e 's/ *Slave_IO_Running: //'`
+
+if [ "$MSG" != "Yes" ]; then
+    # email someone 
+   touch $OFF_FLAG
+   mailx -r "$FROMADDRESS"  -s "$SKULL MySQL Replication OFFLINE SlaveIO" $EMAIL <$SQL_OUTPUT
+   exit
+else
+   if [ -e $OFF_FLAG ]; then
+	echo "ALL CLEAR" | mailx -r "$FROMADDRESS" -s "MySQL Replication ONLINE" $EMAIL
+	rm $OFF_FLAG
+   fi
+fi
+
+#check slave sql
+MSG=`mysql --defaults-file=/etc/mysql/debian.cnf -e "show slave status \G"| grep Slave_SQL_Running | sed -e 's/ *Slave_SQL_Running: //'`
+
+if [ "$MSG" != "Yes" ]; then
+    # email someone 
+   touch $OFF_FLAG
+   mailx -a "$FROMADDRESS"  -s "$SKULL MySQL Replication OFFLINE SLAVESQL" $EMAIL < $SQL_OUTPUT
+   exit
+else
+   if [ -e $OFF_FLAG ]; then
+	echo "ALL CLEAR" | mailx -r "$FROMADDRESS" -s "MySQL Replication ONLINE" $EMAIL
+	rm $OFF_FLAG
+   fi
+fi
+
+#check seconds behind master
+MSG=`mysql --defaults-file=/etc/mysql/debian.cnf -e "show slave status \G"| grep Seconds_Behind_Master | sed -e 's/ *Seconds_Behind_Master: //'`
+
+if [ "$MSG" -ge "$SECONDSTHRESHOLD" ]; then
+    # email someone
+   touch $SLOW_FLAG 
+   mailx -r "$FROMADDRESS" -s "$WARNING MySQL Replication BEHIND $MSG Secs" $EMAIL < $SQL_OUTPUT
+   exit
+else
+   if [ -e $SLOW_FLAG ]; then
+	echo "ALL CLEAR" | mailx -r "$FROMADDRESS" -s "MySQL Replication ok $MSG Secs" $EMAIL
+	rm $SLOW_FLAG
+   fi
+fi
+
