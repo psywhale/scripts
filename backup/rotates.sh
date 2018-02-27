@@ -15,8 +15,8 @@ HOURLY=true
 #24 hour do not pad with zeros 1 2 3 vs 01 02 03
 CURHOUR=`date +%-H`
 #24 hour format
-ROTATEHOUR=9
-
+#ROTATEHOUR=9
+KEEPHOURS=4
 #---DAILIES-------
 KEEPDAILIES=7
 
@@ -47,7 +47,7 @@ verbose () {
 initializedirs () {
 verbose "init backup directories...."
 if [ "$HOURLY" == "true" ]; then
-   for num in `seq 24 -1 0`; do
+   for num in `seq $((KEEPHOURS-1)) -1 0`; do
 
       if [ ! -d backup/hour/$num ]; then
 	 verbose "creating backup/hour/$num"
@@ -97,7 +97,21 @@ done
 verbose "]"
 }
 
-
+rotatehourly() {
+verbose "rotate hourly [" -n
+for num in `seq $((KEEPHOURS-1)) -1 0`; do
+     if [ ! -d backup/hour/$num ]; then
+        mkdir backup/hour/$num
+     fi
+     verbose "$num -> $((num+1))" -n
+     if [ "$num" -gt 0 ]; then
+        verbose ", " -n
+     fi
+     rm -rf ./backup/hour/$((num+1))
+     mv backup/hour/$num backup/hour/$((num+1))
+  done
+verbose "]"
+}
 
 rotatedirs () {
 verbose "rotating directories...."
@@ -138,13 +152,8 @@ fi
 
 #rotate hourly
 if [ "$HOURLY" == true ];then
-   if [ "$ROTATEHOUR" == "$CURHOUR" ];then
-      verbose "rotate hourly to daily"
-      cp -r backup/hour/$CURHOUR/* backup/daily/0
-   fi
-   if [ "$CURHOUR" == "23" ]; then
+      rotatehourly
       rotatedaily
-   fi
 else
    rotatedaily
 fi
