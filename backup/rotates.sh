@@ -15,7 +15,7 @@ HOURLY=true
 #24 hour do not pad with zeros 1 2 3 vs 01 02 03
 CURHOUR=`date +%-H`
 #24 hour format
-#ROTATEHOUR=9
+ROTATEHOUR=16
 KEEPHOURS=4
 #---DAILIES-------
 KEEPDAILIES=7
@@ -109,7 +109,10 @@ for num in `seq $((KEEPHOURS-1)) -1 0`; do
      fi
      rm -rf ./backup/hour/$((num+1))
      mv backup/hour/$num backup/hour/$((num+1))
-  done
+done
+if [ "$CURHOUR" == "$ROTATEHOUR" ]; then
+   cp -r backup/hour/1/* backup/daily/0
+fi
 verbose "]"
 }
 
@@ -164,14 +167,14 @@ fi
 
 
 if [ "$HOURLY" == true ]; then
-   BACKUPLOC="backup/hour/$CURHOUR"
+   BACKUPLOC="backup/hour/0"
 else
    BACKUPLOC="backup/daily/0"
 fi
 
 #------Main code------
 
-mount -t nfs ip:/volume1/backups /mnt
+mount -t nfs 10.250.20.211:/volume1/backups /mnt
 
 if [ ! -d /mnt/$SERVER ];then
    mkdir /mnt/$SERVER
@@ -179,10 +182,12 @@ fi
 
 cd /mnt/$SERVER
 initializedirs
-#tar zcvf $BACKUPLOC/"$SERVER$D".tar.gz /etc/
-innobackupex --parallel=4 --no-timestamp --safe-slave-backup $BACKUPLOC
+tar zcvf $BACKUPLOC/"$SERVER$D".tar.gz /etc/
+
+#innobackupex --parallel=4 --no-timestamp --safe-slave-backup $BACKUPLOC
+
 rotatedirs
 
 cd /
 
-umount /mnt
+#umount /mnt
